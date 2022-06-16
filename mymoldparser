@@ -1,0 +1,207 @@
+# цель кода  - предоставлять информацию о Молдавии из румынского интернета. 
+import telebot
+import time
+import pandas as pd
+from bs4 import BeautifulSoup as bs
+import requests
+import sqlite3
+import os
+import re
+import time
+os.chdir('c:/')
+
+
+def scrape(url, method):
+    print('scraping rointernet')
+    time.sleep(5)
+    session = requests.Session()
+    response = session.get(url, headers={'User-Agent': 'Safari 14.1.2 '})
+    page = bs(response.content, 'html.parser', from_encoding='utf_8_sig')
+
+    df = method(page)
+    out = database(df)
+
+    return out
+
+def main():
+    dg = scrape('https://www.digi24.ro/stiri/externe/moldova', digi24)
+    ad = scrape('https://adevarul.ro/cauta/?terms=moldova', adevarul)
+    li = scrape('https://www.libertatea.ro/subiect/republica-moldova', libertatea)
+    hn = scrape('https://www.hotnews.ro/cauta?cauta=moldova', hotnews)
+    zf = scrape('https://www.zf.ro/search?q=moldova', ziarul_financiar)
+    jl = scrape('https://jurnalul.ro/tag/republica-moldova-5653.html', jurnalul)
+    cl = scrape('https://www.cotidianul.ro/tag/republica-moldova/', cotidianul)
+
+    df = dg
+    for i in [ad, li, hn, zf, jl, cl]:
+        df = df.append(i)
+        df.reset_index(inplace=True, drop=True)
+
+        df = database(df)
+
+    output = df
+    for i in range(len(output)):
+        if 'https://' not in output['link'][i]:
+            temp = re.search('www', output['link'][i]).start()
+            output.at[i, 'link'] = 'http://' + output['link'][i][temp:]
+
+    print(output)
+
+
+def database(df):
+    temp = []
+    conn = sqlite3.connect("mold_news.db")
+    c = conn.cursor()
+
+    for i in range(len(df)):
+        try:
+            c.execute("""INSERT INTO news VALUES (?,?,?)""", df.iloc[i, :])
+            conn.commit()
+
+            print('Updating...')
+            temp.append(i)
+        except Exception as e:
+            print(e)
+
+    conn.close()
+
+    if temp:
+        output = df.loc[[i for i in temp]]
+        output.reset_index(inplace=True, drop=True)
+    else:
+        output = pd.DataFrame()
+        output['title'] = ['No updates yet.']
+        output['link'] = output['image'] = ['']
+
+    return output
+
+
+#  digi24 etl
+def digi24(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://www.digi24.ro'
+
+    a = page.find_all('div', class_="container")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+# adevarul etl
+def adevarul(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://adevarul.ro'
+
+    a = page.find_all('div', class_="padded")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+
+def libertatea(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://www.libertatea.ro'
+
+    a = page.find_all('div', class_="title-and-description")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+def jurnalul(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://jurnalul.ro'
+
+    a = page.find_all('div', class_="main")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+def hotnews(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://hotnews.ro'
+
+    a = page.find_all('div', class_="container is-actualitate")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+def ziarul_financiar(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'https://zf.ro'
+
+    a = page.find_all('div', class_="moldova - Articole despre moldova")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+def contidianul(page):
+    title, link, image = [], [], []
+    df = pd.DataFrame()
+    prefix = 'www.cotidianul.ro'
+
+    a = page.find_all('div', class_="topic-item-container")
+
+    for i in a:
+        link.append(prefix + i.find('a').get('href'))
+        title.append(i.find('a').text)
+        image.append(i.parent.find('img').get('src'))
+
+    df['title'] = title
+    df['link'] = link
+    df['image'] = image
+
+    return df
+
+
